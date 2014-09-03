@@ -9,6 +9,19 @@ import (
 	"time"
 )
 
+var multiline = `
+// Hook up gocheck into the "go test" runner.
+func Test(t *testing.T) { TestingT(t) }
+
+type MuxDemuxSuite struct{}
+
+var _ = Suite(&MuxDemuxSuite{})
+
+func (s *MuxDemuxSuite) SetUpSuite(c *C) {
+
+}
+`
+
 // Hook up gocheck into the "go test" runner.
 func Test(t *testing.T) { TestingT(t) }
 
@@ -34,7 +47,7 @@ func (s *MuxDemuxSuite) TestMuxDemuxServer(c *C) {
 						msg := new(Message)
 						id, _ := uuid.NewV4()
 						msg.Id = id.String()
-						msg.Body = []byte("Hello how are you?")
+						msg.Body = []byte(multiline)
 						mxdxs.Send(msg)
 						time.Sleep(1 * time.Second)
 					}
@@ -89,6 +102,8 @@ func (s *MuxDemuxSuite) TestMuxDemuxServer(c *C) {
 			} else {
 				fmt.Printf("%v", err)
 			}
+			time.Sleep(10 * time.Second)
+			return
 		}
 	} else {
 		fmt.Printf("%v", err)
@@ -104,7 +119,7 @@ func (s *MuxDemuxSuite) TestMuxDemuxClient(c *C) {
 		go func() {
 			mxdxs := mxdx.GetChannel("Sample")
 			for message := range mxdxs.In {
-				fmt.Printf("Message:%v", message.String())
+				fmt.Printf("\nMessage: %s", string(message.Body))
 				msg := new(Message)
 				id, _ := uuid.NewV4()
 				msg.Id = id.String()
@@ -116,7 +131,7 @@ func (s *MuxDemuxSuite) TestMuxDemuxClient(c *C) {
 		go func() {
 			mxdxs := mxdx.GetChannel("Sample2")
 			for message := range mxdxs.In {
-				fmt.Printf("Message:%v", message.String())
+				fmt.Printf("\nMessage: %s", string(message.Body))
 				msg := new(Message)
 				id, _ := uuid.NewV4()
 				msg.Id = id.String()
@@ -128,7 +143,8 @@ func (s *MuxDemuxSuite) TestMuxDemuxClient(c *C) {
 		go func() {
 			mxdxs := mxdx.GetChannel("Sample3")
 			for message := range mxdxs.In {
-				fmt.Printf("Message:%v", message.String())
+				fmt.Printf("\nMessage: %s", string(message.Body))
+
 				msg := new(Message)
 				id, _ := uuid.NewV4()
 				msg.Id = id.String()
@@ -137,7 +153,10 @@ func (s *MuxDemuxSuite) TestMuxDemuxClient(c *C) {
 			}
 		}()
 		for {
-			time.Sleep(10 * time.Minute)
+			time.Sleep(10 * time.Second)
+			mxdx.Close()
+			time.Sleep(2 * time.Second)
+			return
 		}
 
 	}
