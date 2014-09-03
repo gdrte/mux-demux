@@ -5,6 +5,7 @@ import (
 	uuid "github.com/nu7hatch/gouuid"
 	. "gopkg.in/check.v1"
 	"net"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -27,6 +28,7 @@ func (s *MuxDemuxSuite) SetUpSuite(c *C) {
 
 func (s *MuxDemuxSuite) TestMuxDemuxServer(c *C) {
 	fmt.Printf("Starting Server..")
+	runtime.GOMAXPROCS(runtime.NumCPU())
 	if ln, err := net.Listen("tcp", "localhost:8081"); err == nil {
 		for {
 			if conn, err := ln.Accept(); err == nil {
@@ -107,16 +109,18 @@ func (s *MuxDemuxSuite) TestMuxDemuxServer(c *C) {
 			} else {
 				fmt.Printf("%v", err)
 			}
-			time.Sleep(20 * time.Second)
+			time.Sleep(60 * time.Second)
 			return
 		}
 	} else {
 		fmt.Printf("%v", err)
 	}
+
 }
 
 func (s *MuxDemuxSuite) TestMuxDemuxClient(c *C) {
 	fmt.Printf("Starting Client...")
+	runtime.GOMAXPROCS(runtime.NumCPU())
 	if conn, err := net.Dial("tcp", "localhost:8081"); err == nil {
 		fmt.Printf("Client connection accepted...")
 		mxdx := New(conn)
@@ -152,7 +156,7 @@ func (s *MuxDemuxSuite) TestMuxDemuxClient(c *C) {
 		}()
 
 		go func() {
-			if mxdxs, err := mxdx.GetChannel("Sample2"); err != NotAvailable {
+			if mxdxs, err := mxdx.GetChannel("Sample3"); err != NotAvailable {
 
 				for message := range mxdxs.In {
 					fmt.Printf("\nMessage: %s", string(message.Body))
@@ -168,11 +172,15 @@ func (s *MuxDemuxSuite) TestMuxDemuxClient(c *C) {
 			}
 		}()
 		for {
-			time.Sleep(5 * time.Second)
-			// mxdx.CloseChannel("Sample")
-			// mxdx.CloseChannel("Sample2")
-			// mxdx.CloseChannel("Sample3")
+
+			time.Sleep(60 * time.Second)
 			mxdx.Close()
+			mxdx.CloseChannel("Sample")
+			time.Sleep(1 * time.Second)
+			mxdx.CloseChannel("Sample2")
+			time.Sleep(1 * time.Second)
+			mxdx.CloseChannel("Sample3")
+
 			time.Sleep(10 * time.Second)
 
 			return

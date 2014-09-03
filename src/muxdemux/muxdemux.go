@@ -62,7 +62,7 @@ type Message struct {
 }
 
 func New(conn net.Conn) *MuxDemux {
-	mxdx := &MuxDemux{conn: conn, streams: make(map[string]*MuxDemuxChannel), in: make(chan *Message, 100), out: make(chan *Message, 100),
+	mxdx := &MuxDemux{conn: conn, streams: make(map[string]*MuxDemuxChannel), in: make(chan *Message, 10), out: make(chan *Message, 10),
 		wg: sync.WaitGroup{}}
 	go mxdx.read()
 	go mxdx.fanOut()
@@ -76,8 +76,7 @@ func New(conn net.Conn) *MuxDemux {
 func (mxdx *MuxDemux) Close() {
 	// close(mxdx.exit)
 	go func() {
-		close(mxdx.in)
-		close(mxdx.out)
+
 		for key, _ := range mxdx.streams {
 			mxdx.CloseChannel(key)
 		}
@@ -87,7 +86,7 @@ func (mxdx *MuxDemux) Close() {
 }
 
 func (mxdx *MuxDemux) NewChannel(name string) *MuxDemuxChannel {
-	mxdxs := &MuxDemuxChannel{Name: name, In: make(chan *Message, 20), Out: make(chan *Message, 20)}
+	mxdxs := &MuxDemuxChannel{Name: name, In: make(chan *Message, 10), Out: make(chan *Message, 5)}
 	go mxdx.fanIn(mxdxs)
 	mxdx.streams[name] = mxdxs
 	return mxdxs
@@ -105,9 +104,8 @@ func (mxdx *MuxDemux) CloseChannel(name string) {
 	if mxdxs, ok := mxdx.streams[name]; ok {
 		delete(mxdx.streams, name)
 		mxdxs.Update(mxdx.conn, "-")
-
 		go func() {
-			time.Sleep(1 * time.Second)
+			time.Sleep(10 * time.Second)
 			close(mxdxs.In)
 			close(mxdxs.Out)
 			fmt.Printf("Closed the channel %s and removed the reference\n", name)
@@ -118,7 +116,6 @@ func (mxdx *MuxDemux) CloseChannel(name string) {
 func (mxdxs *MuxDemuxChannel) Send(msg *Message) {
 	msg.SName = mxdxs.Name
 	mxdxs.Out <- msg
-	fmt.Println("Message sent..")
 }
 
 func (mxdxs *MuxDemuxChannel) Update(conn net.Conn, aORr string) {
@@ -142,7 +139,6 @@ func (mxdx *MuxDemux) fanOut() {
 		if mxdxs, ok := mxdx.streams[message.SName]; ok {
 			mxdxs.In <- message
 		}
-
 	}
 	fmt.Printf("Exiting fanOut \n")
 }
@@ -169,6 +165,7 @@ OutLoop:
 	}
 	mxdx.wg.Done()
 	fmt.Printf("Exiting write \n")
+	close(mxdx.out)
 }
 
 func readLine(reader *bufio.Reader) (string, error) {
@@ -198,8 +195,9 @@ Infinity:
 				if msg.Body, err = base64.StdEncoding.DecodeString(body); err != nil {
 					fmt.Printf("Error! Body corrupted %v", err)
 				}
-				fmt.Println(string(msg.Body))
+
 				mxdx.in <- msg
+
 				break
 			case "STREAM":
 				if name, err := readLine(reader); err == nil {
@@ -233,12 +231,19 @@ Infinity:
 				mxdx.Close()
 				break Infinity
 			default:
-				fmt.Printf("Default err:%v\n", err)
+				if nerr, ok := err.(*net.OpError); ok {
+					fmt.Printf("Network error:%v\n", err)
+					if !nerr.Temporary() {
+						break Infinity
+					}
+				}
+
 				break Infinity
 			}
 
 		}
 	}
+	close(mxdx.in)
 	mxdx.wg.Done()
 	fmt.Println("Quitting read()")
 }
